@@ -36,7 +36,7 @@ class NPO(BatchPolopt):
         optimizer_args (dict, optional): The arguments of the optimizer.
         name (str, optional): The name of the algorithm.
         policy_ent_coeff (float, optional): The coefficient of the policy
-            entropy.
+            entropy. Setting it to zero would mean no entropy regularization.
         entropy_method (str, optional): A string from: 'max', 'regularized'.
             The type of entropy method to use. 'max' adds the dense entropy
             to the reward for each time step. 'regularized' adds the mean
@@ -74,7 +74,7 @@ class NPO(BatchPolopt):
                  use_softplus_entropy=False,
                  use_neg_logli_entropy=False,
                  stop_entropy_gradient=False,
-                 entropy_method='regularized',
+                 entropy_method=None,
                  **kwargs):
         self.name = name
         self._name_scope = tf.name_scope(self.name)
@@ -93,6 +93,9 @@ class NPO(BatchPolopt):
         elif entropy_method == 'regularized':
             self._maximum_entropy = False
             self._entropy_regularzied = True
+        elif entropy_method is None:
+            self._maximum_entropy = False
+            self._entropy_regularzied = False
         else:
             raise ValueError('Unknown entropy_method')
 
