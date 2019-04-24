@@ -1,6 +1,5 @@
 """This module implements a PPO algorithm."""
 from garage.tf.algos.npo import NPO
-from garage.tf.algos.npo import PGLoss
 from garage.tf.optimizers import FirstOrderOptimizer
 
 
@@ -24,8 +23,8 @@ class PPO(NPO):
             if optimizer_args is None:
                 optimizer_args = dict()
         super(PPO, self).__init__(
-            pg_loss=PGLoss.SURROGATE_CLIP,
+            pg_loss='surrogate_clip',
             optimizer=optimizer,
             optimizer_args=optimizer_args,
-            name="PPO",
+            name='PPO',
             **kwargs)

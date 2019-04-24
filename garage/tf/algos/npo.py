@@ -1,6 +1,4 @@
 """Natural Policy Gradient Optimization."""
-from enum import Enum, unique
-
 import numpy as np
 import tensorflow as tf
 
@@ -22,48 +20,51 @@ from garage.tf.misc.tensor_utils import positive_advs
 from garage.tf.optimizers import LbfgsOptimizer
 
 
-@unique
-class PGLoss(Enum):
-    VANILLA = 'vanilla'
-    SURROGATE = 'surrogate'
-    SURROGATE_CLIP = 'surrogate_clip'
-
-
 class NPO(BatchPolopt):
     """
     Natural Policy Gradient Optimization.
 
     Args:
-        pg_loss(enum): The type of loss functions to use.
-        lr_clip_range(float): The limit on the likelihood ratio between
-            policies, as in PPO.
-        max_kl_step(float): The maximum KL divergence between old and new
-            policies, as in TRPO.
-        optimizer(object): The optimizer of the algorithm.
-        optimizer_args(dict): The arguments of the optimizer.
-        name(str): The name of the algorithm.
-        policy_ent_coeff(float): The coefficient of the policy entropy.
-        entropy_method(str): A string from: 'max', 'regularized'. The type
-            of entropy method to use. 'max' adds the dense entropy to the
-            reward for each time step. 'regularized' adds the mean entropy
-            to the surrogate objective. See https://arxiv.org/abs/1805.00909
-            for more details.
-            !!NOTE!!: make sure when setting entropy_method to 'max', set
-            `center_adv` to False and turn off policy gradient. `center_adv`
-            normalizes the advantages tensor, which will significantly
-            alleviate the effect of entropy. It is also recommended to turn
-            off entropy gradient so that the agent will focus on high-entropy
-            actions instead of increasing the variance of the distribution.
-        use_neg_logli_entropy(bool): Whether to estimate the entropy as the
-            negative log likelihood of the action.
-        use_softplus_entropy(bool): Whether to estimate the softmax
+        pg_loss (str, optional): A string from: 'vanilla', 'surrogate',
+            'surrogate_clip'. The type of loss functions to use.
+        lr_clip_range (float, optional): The limit on the likelihood ratio
+            between policies, as in PPO.
+        max_kl_step (float, optional): The maximum KL divergence between old
+            and new policies, as in TRPO.
+        optimizer (object, optional): The optimizer of the algorithm. Should
+            be the optimizers in garage.tf.optimizers.
+        optimizer_args (dict, optional): The arguments of the optimizer.
+        name (str, optional): The name of the algorithm.
+        policy_ent_coeff (float, optional): The coefficient of the policy
+            entropy.
+        entropy_method (str, optional): A string from: 'max', 'regularized'.
+            The type of entropy method to use. 'max' adds the dense entropy
+            to the reward for each time step. 'regularized' adds the mean
+            entropy to the surrogate objective. See
+            https://arxiv.org/abs/1805.00909 for more details.
+        use_neg_logli_entropy (bool, optional): Whether to estimate the
+            entropy as the negative log likelihood of the action.
+        use_softplus_entropy (bool, optional): Whether to estimate the softmax
             distribution of the entropy to prevent the entropy from being
             negative.
-        stop_entropy_gradient(bool): Whether to stop the entropy gradient.
+        stop_entropy_gradient (bool, optional): Whether to stop the entropy
+            gradient.
+
+    Note:
+        sane defaults for entropy configuration:
+            - entropy_method='max', center_adv=False, stop_gradient=True
+              (`center_adv`normalizes the advantages tensor, which will
+              significantly alleviate the effect of entropy. It is also
+              recommended to turn off entropy gradient so that the agent
+              will focus on high-entropy actions instead of increasing the
+              variance of the distribution.
+
+            - entropy_method='regularized', stop_gradient=False,
+              use_neg_logli_entropy=False
     """
 
     def __init__(self,
-                 pg_loss=PGLoss.SURROGATE,
+                 pg_loss='surrogate',
                  lr_clip_range=0.01,
                  max_kl_step=0.01,
                  optimizer=None,
@@ -93,7 +94,7 @@ class NPO(BatchPolopt):
             self._maximum_entropy = False
             self._entropy_regularzied = True
         else:
-            raise NotImplementedError('Unknown entropy_method')
+            raise ValueError('Unknown entropy_method')
 
         with self._name_scope:
             self.optimizer = optimizer(**optimizer_args)
@@ -366,13 +367,13 @@ class NPO(BatchPolopt):
 
             # Finalize objective function
             with tf.name_scope('loss'):
-                if self._pg_loss == PGLoss.VANILLA:
+                if self._pg_loss == 'vanilla':
                     # VPG uses the vanilla objective
                     obj = tf.identity(vanilla, name='vanilla_obj')
-                elif self._pg_loss == PGLoss.SURROGATE:
+                elif self._pg_loss == 'surrogate':
                     # TRPO uses the standard surrogate objective
                     obj = tf.identity(surrogate, name='surr_obj')
-                elif self._pg_loss == PGLoss.SURROGATE_CLIP:
+                elif self._pg_loss == 'surrogate_clip':
                     lr_clip = tf.clip_by_value(
                         lr,
                         1 - self.lr_clip_range,

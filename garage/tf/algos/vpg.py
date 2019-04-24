@@ -1,5 +1,4 @@
 from garage.tf.algos.npo import NPO
-from garage.tf.algos.npo import PGLoss
 from garage.tf.optimizers import FirstOrderOptimizer
 
 
@@ -20,8 +19,8 @@ class VPG(NPO):
             else:
                 optimizer_args = dict(default_args, **optimizer_args)
         super(VPG, self).__init__(
-            pg_loss=PGLoss.VANILLA,
+            pg_loss='vanilla',
             optimizer=optimizer,
             optimizer_args=optimizer_args,
-            name="VPG",
+            name='VPG',
             **kwargs)
