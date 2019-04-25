@@ -306,17 +306,17 @@ class NPO(BatchPolopt):
                 policy_dist_info = self.policy.dist_info_sym(
                     i.obs_var,
                     i.policy_state_info_vars,
-                    name='policy_dist_info')
+                    name='pol_loss_policy_dist_info')
             else:
                 policy_dist_info_flat = self.policy.dist_info_sym(
                     i.flat.obs_var,
                     i.flat.policy_state_info_vars,
-                    name='policy_dist_info_flat')
+                    name='pol_loss_policy_dist_info_flat')
 
                 policy_dist_info_valid = filter_valids_dict(
                     policy_dist_info_flat,
                     i.flat.valid_var,
-                    name='policy_dist_info_valid')
+                    name='pol_loss_policy_dist_info_valid')
 
             # Calculate loss function and KL divergence
             with tf.name_scope('kl'):
