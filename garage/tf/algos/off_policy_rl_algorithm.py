@@ -21,7 +21,7 @@ class OffPolicyRLAlgorithm(RLAlgorithm):
             max_path_length=None,
             n_train_steps=50,
             buffer_batch_size=64,
-            min_buffer_size=int(1e4),
+            min_buffer_size=1e4,
             rollout_batch_size=1,
             reward_scale=1.,
             input_include_goal=False,
@@ -38,7 +38,7 @@ class OffPolicyRLAlgorithm(RLAlgorithm):
         self.buffer_batch_size = buffer_batch_size
         self.use_target = use_target
         self.discount = discount
-        self.min_buffer_size = min_buffer_size
+        self.min_buffer_size = int(min_buffer_size)
         self.rollout_batch_size = rollout_batch_size
         self.reward_scale = reward_scale
         self.evaluate = False

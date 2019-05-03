@@ -68,7 +68,7 @@ def run_task(*_):
             smooth_return=False,
             discount=0.99,
             buffer_batch_size=100,
-            min_buffer_size=int(1e4),
+            min_buffer_size=1e4,
             exploration_strategy=action_noise,
             policy_optimizer=tf.train.AdamOptimizer,
             qf_optimizer=tf.train.AdamOptimizer)
