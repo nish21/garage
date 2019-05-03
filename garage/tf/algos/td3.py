@@ -26,7 +26,7 @@ class TD3(DDPG):
     """
 
     def __init__(self,
-                 env,
+                 env_spec,
                  qf2,
                  replay_buffer,
                  target_update_tau=0.01,
@@ -68,7 +68,7 @@ class TD3(DDPG):
         self.qf2 = qf2
 
         super(TD3, self).__init__(
-            env=env,
+            env_spec=env_spec,
             replay_buffer=replay_buffer,
             target_update_tau=target_update_tau,
             policy_lr=policy_lr,
@@ -87,26 +87,26 @@ class TD3(DDPG):
     @overrides
     def init_opt(self):
         """Init the optimizer."""
-        with tf.name_scope(self.name, "TD3"):
+        with tf.name_scope(self.name, 'TD3'):
             # Create target policy (actor) and qf (critic) networks
             self.target_policy_f_prob_online, _, _ = self.policy.build_net(
-                trainable=False, name="target_policy")
+                trainable=False, name='target_policy')
             self.target_qf_f_prob_online, _, _, _ = self.qf.build_net(
-                trainable=False, name="target_qf")
+                trainable=False, name='target_qf')
             self.target_qf2_f_prob_online, _, _, _ = self.qf2.build_net(
-                trainable=False, name="target_qf2")
+                trainable=False, name='target_qf2')
 
             # Set up target init and update functions
-            with tf.name_scope("setup_target"):
+            with tf.name_scope('setup_target'):
                 policy_init_ops, policy_update_ops = self.get_target_ops(
                     self.policy.get_global_vars(),
-                    self.policy.get_global_vars("target_policy"), self.tau)
+                    self.policy.get_global_vars('target_policy'), self.tau)
                 qf_init_ops, qf_update_ops = self.get_target_ops(
                     self.qf.get_global_vars(),
-                    self.qf.get_global_vars("target_qf"), self.tau)
+                    self.qf.get_global_vars('target_qf'), self.tau)
                 qf2_init_ops, qf2_update_ops = self.get_target_ops(
                     self.qf2.get_global_vars(),
-                    self.qf2.get_global_vars("target_qf2"), self.tau)
+                    self.qf2.get_global_vars('target_qf2'), self.tau)
                 target_init_op = policy_init_ops + qf_init_ops
                 target_update_op = policy_update_ops + qf_update_ops
                 target_init_op2 = policy_init_ops + qf2_init_ops
@@ -121,30 +121,30 @@ class TD3(DDPG):
             f_update_target2 = tensor_utils.compile_function(
                 inputs=[], outputs=target_update_op2)
 
-            with tf.name_scope("inputs"):
+            with tf.name_scope('inputs'):
                 if self.input_include_goal:
-                    obs_dim = self.env.observation_space.flat_dim_with_keys(
-                        ["observation", "desired_goal"])
+                    obs_dim = self.env_spec.observation_space.\
+                        flat_dim_with_keys(['observation', 'desired_goal'])
                 else:
-                    obs_dim = self.env.observation_space.flat_dim
-                y = tf.placeholder(tf.float32, shape=(None, 1), name="input_y")
+                    obs_dim = self.env_spec.observation_space.flat_dim
+                y = tf.placeholder(tf.float32, shape=(None, 1), name='input_y')
                 obs = tf.placeholder(
                     tf.float32,
                     shape=(None, obs_dim),
-                    name="input_observation")
+                    name='input_observation')
                 actions = tf.placeholder(
                     tf.float32,
-                    shape=(None, self.env.action_space.flat_dim),
-                    name="input_action")
+                    shape=(None, self.env_spec.action_space.flat_dim),
+                    name='input_action')
 
             # Set up policy training function
-            next_action = self.policy.get_action_sym(obs, name="policy_action")
+            next_action = self.policy.get_action_sym(obs, name='policy_action')
             qval = self.qf.get_qval_sym(
-                obs, next_action, name="policy_action_qval")
+                obs, next_action, name='policy_action_qval')
             q2val = self.qf2.get_qval_sym(
-                obs, next_action, name="policy_action_q2val")
+                obs, next_action, name='policy_action_q2val')
             next_qval = tf.minimum(qval, q2val)
-            with tf.name_scope("action_loss"):
+            with tf.name_scope('action_loss'):
                 action_loss = -tf.reduce_mean(next_qval)
                 if self.policy_weight_decay > 0.:
                     policy_reg = tc.layers.apply_regularization(
@@ -152,18 +152,18 @@ class TD3(DDPG):
                         weights_list=self.policy.get_regularizable_vars())
                     action_loss += policy_reg
 
-            with tf.name_scope("minimize_action_loss"):
+            with tf.name_scope('minimize_action_loss'):
                 policy_train_op = self.policy_optimizer(
-                    self.policy_lr, name="PolicyOptimizer").minimize(
+                    self.policy_lr, name='PolicyOptimizer').minimize(
                         action_loss, var_list=self.policy.get_trainable_vars())
 
             f_train_policy = tensor_utils.compile_function(
                 inputs=[obs], outputs=[policy_train_op, action_loss])
 
             # Set up qf training function
-            qval = self.qf.get_qval_sym(obs, actions, name="q_value")
-            q2val = self.qf2.get_qval_sym(obs, actions, name="q2_value")
-            with tf.name_scope("qval_loss"):
+            qval = self.qf.get_qval_sym(obs, actions, name='q_value')
+            q2val = self.qf2.get_qval_sym(obs, actions, name='q2_value')
+            with tf.name_scope('qval_loss'):
                 qval_loss = (tf.reduce_mean(tf.squared_difference(y, qval)) +
                              tf.reduce_mean(tf.squared_difference(y, q2val)))
                 if self.qf_weight_decay > 0.:
@@ -172,12 +172,12 @@ class TD3(DDPG):
                         weights_list=self.qf.get_regularizable_vars())
                     qval_loss += qf_reg
 
-            with tf.name_scope("minimize_qf_loss"):
+            with tf.name_scope('minimize_qf_loss'):
                 qf_train_op = self.qf_optimizer(
-                    self.qf_lr, name="QFunctionOptimizer").minimize(
+                    self.qf_lr, name='QFunctionOptimizer').minimize(
                         qval_loss, var_list=self.qf.get_trainable_vars())
                 qf2_train_op = self.qf_optimizer(
-                    self.qf_lr, name="QFunctionOptimizer").minimize(
+                    self.qf_lr, name='QFunctionOptimizer').minimize(
                         qval_loss, var_list=self.qf2.get_trainable_vars())
 
             f_train_qf = tensor_utils.compile_function(
@@ -208,17 +208,17 @@ class TD3(DDPG):
 
         """
         transitions = self.replay_buffer.sample(self.buffer_batch_size)
-        observations = transitions["observation"]
-        rewards = transitions["reward"]
-        actions = transitions["action"]
-        next_observations = transitions["next_observation"]
-        terminals = transitions["terminal"]
+        observations = transitions['observation']
+        rewards = transitions['reward']
+        actions = transitions['action']
+        next_observations = transitions['next_observation']
+        terminals = transitions['terminal']
 
         rewards = rewards.reshape(-1, 1)
         terminals = terminals.reshape(-1, 1)
 
         if self.input_include_goal:
-            goals = transitions["goal"]
+            goals = transitions['goal']
             next_inputs = np.concatenate((next_observations, goals), axis=-1)
             inputs = np.concatenate((observations, goals), axis=-1)
         else:

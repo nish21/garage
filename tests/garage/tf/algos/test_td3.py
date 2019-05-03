@@ -6,7 +6,7 @@ import gym
 import tensorflow as tf
 
 from garage.experiment import LocalRunner
-from garage.exploration_strategies import OUStrategy
+from garage.np.exploration_strategies import OUStrategy
 from garage.replay_buffer import SimpleReplayBuffer
 from garage.tf.algos import TD3
 from garage.tf.envs import TfEnv
@@ -30,13 +30,13 @@ class TestTD3(TfGraphTestCase):
                 output_nonlinearity=tf.nn.tanh)
 
             qf = ContinuousMLPQFunction(
-                name="ContinuousMLPQFunction",
+                name='ContinuousMLPQFunction',
                 env_spec=env.spec,
                 hidden_sizes=[64, 64],
                 hidden_nonlinearity=tf.nn.relu)
 
             qf2 = ContinuousMLPQFunction(
-                name="ContinuousMLPQFunction2",
+                name='ContinuousMLPQFunction2',
                 env_spec=env.spec,
                 hidden_sizes=[64, 64],
                 hidden_nonlinearity=tf.nn.relu)
@@ -47,7 +47,7 @@ class TestTD3(TfGraphTestCase):
                 time_horizon=100)
 
             algo = TD3(
-                env,
+                env_spec=env.spec,
                 policy=policy,
                 policy_lr=1e-4,
                 qf_lr=1e-3,
