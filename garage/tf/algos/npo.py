@@ -37,10 +37,10 @@ class NPO(BatchPolopt):
         name (str, optional): The name of the algorithm.
         policy_ent_coeff (float, optional): The coefficient of the policy
             entropy. Setting it to zero would mean no entropy regularization.
-        entropy_method (str, optional): A string from: 'max', 'regularized'.
-            The type of entropy method to use. 'max' adds the dense entropy
-            to the reward for each time step. 'regularized' adds the mean
-            entropy to the surrogate objective. See
+        entropy_method (str, optional): A string from: 'max', 'regularized',
+            'no_entropy'. The type of entropy method to use. 'max' adds the
+            dense entropy to the reward for each time step. 'regularized' adds
+            the mean entropy to the surrogate objective. See
             https://arxiv.org/abs/1805.00909 for more details.
         use_neg_logli_entropy (bool, optional): Whether to estimate the
             entropy as the negative log likelihood of the action.
@@ -74,7 +74,8 @@ class NPO(BatchPolopt):
                  use_softplus_entropy=False,
                  use_neg_logli_entropy=False,
                  stop_entropy_gradient=False,
-                 entropy_method=None,
+                 entropy_method='no_entropy',
+                 center_adv=True,
                  **kwargs):
         self.name = name
         self._name_scope = tf.name_scope(self.name)
@@ -88,16 +89,24 @@ class NPO(BatchPolopt):
             optimizer = LbfgsOptimizer
 
         if entropy_method == 'max':
+            assert not center_adv and stop_entropy_gradient, (
+                'center_adv should be False and stop_gradient should be True '
+                'when entropy_method is max')
             self._maximum_entropy = True
             self._entropy_regularzied = False
         elif entropy_method == 'regularized':
+            assert not use_neg_logli_entropy and not stop_entropy_gradient, (
+                'use_neg_logli_entropy and stop_entropy_gradient should be '
+                'False when entropy_method is regularized')
             self._maximum_entropy = False
             self._entropy_regularzied = True
-        elif entropy_method is None:
+        elif entropy_method == 'no_entropy':
+            assert policy_ent_coeff == 0.0, ('policy_ent_coeff should be zero '
+                                             'when there is no entropy method')
             self._maximum_entropy = False
             self._entropy_regularzied = False
         else:
-            raise ValueError('Unknown entropy_method')
+            raise ValueError('Invalid entropy_method')
 
         with self._name_scope:
             self.optimizer = optimizer(**optimizer_args)
@@ -105,7 +114,7 @@ class NPO(BatchPolopt):
             self.max_kl_step = float(max_kl_step)
             self.policy_ent_coeff = float(policy_ent_coeff)
 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, center_adv=center_adv)
 
     @overrides
     def init_opt(self):
@@ -306,17 +315,17 @@ class NPO(BatchPolopt):
                 policy_dist_info = self.policy.dist_info_sym(
                     i.obs_var,
                     i.policy_state_info_vars,
-                    name='pol_loss_policy_dist_info')
+                    name='policy_dist_info')
             else:
                 policy_dist_info_flat = self.policy.dist_info_sym(
                     i.flat.obs_var,
                     i.flat.policy_state_info_vars,
-                    name='pol_loss_policy_dist_info_flat')
+                    name='policy_dist_info_flat')
 
                 policy_dist_info_valid = filter_valids_dict(
                     policy_dist_info_flat,
                     i.flat.valid_var,
-                    name='pol_loss_policy_dist_info_valid')
+                    name='policy_dist_info_valid')
 
             # Calculate loss function and KL divergence
             with tf.name_scope('kl'):
@@ -442,7 +451,7 @@ class NPO(BatchPolopt):
                 policy_dist_info_flat = self.policy.dist_info_sym(
                     i.flat.obs_var,
                     i.flat.policy_state_info_vars,
-                    name='policy_dist_info_flat')
+                    name='policy_dist_info_flat_2')
 
                 policy_neg_log_likeli_flat = -self.policy.distribution.log_likelihood_sym(  # noqa: E501
                     i.flat.action_var,
@@ -452,7 +461,7 @@ class NPO(BatchPolopt):
                 policy_dist_info_valid = filter_valids_dict(
                     policy_dist_info_flat,
                     i.flat.valid_var,
-                    name='policy_dist_info_valid')
+                    name='policy_dist_info_valid_2')
 
                 policy_neg_log_likeli_valid = -self.policy.distribution.log_likelihood_sym(  # noqa: E501
                     i.valid.action_var,

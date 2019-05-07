@@ -18,7 +18,7 @@ class TestNPO(TfGraphTestCase):
     def test_npo_pendulum(self):
         """Test NPO with Pendulum environment."""
         with LocalRunner(self.sess) as runner:
-            env = TfEnv(normalize(gym.make("InvertedDoublePendulum-v2")))
+            env = TfEnv(normalize(gym.make('InvertedDoublePendulum-v2')))
             policy = GaussianMLPPolicy(
                 env_spec=env.spec,
                 hidden_sizes=(64, 64),
@@ -43,9 +43,9 @@ class TestNPO(TfGraphTestCase):
 
             env.close()
 
-    def test_npo_unknown_pg_loss(self):
+    def test_npo_with_unknown_pg_loss(self):
         """Test NPO with unkown policy gradient loss."""
-        env = TfEnv(normalize(gym.make("InvertedDoublePendulum-v2")))
+        env = TfEnv(normalize(gym.make('InvertedDoublePendulum-v2')))
         policy = GaussianMLPPolicy(
             env_spec=env.spec,
             hidden_sizes=(64, 64),
@@ -56,13 +56,109 @@ class TestNPO(TfGraphTestCase):
             env_spec=env.spec,
             regressor_args=dict(hidden_sizes=(32, 32)),
         )
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(NotImplementedError, msg='Unknown PGLoss'):
             NPO(
                 env_spec=env.spec,
                 policy=policy,
                 baseline=baseline,
-                pg_loss="random pg_loss",
+                pg_loss='random pg_loss',
             )
-        assert "Unknown PGLoss" in str(context.exception)
+
+        env.close()
+
+    def test_npo_with_invalid_entropy_method(self):
+        """Test NPO with invalid entropy method."""
+        env = TfEnv(normalize(gym.make('InvertedDoublePendulum-v2')))
+        policy = GaussianMLPPolicy(
+            env_spec=env.spec,
+            hidden_sizes=(64, 64),
+            hidden_nonlinearity=tf.nn.tanh,
+            output_nonlinearity=None,
+        )
+        baseline = GaussianMLPBaseline(
+            env_spec=env.spec,
+            regressor_args=dict(hidden_sizes=(32, 32)),
+        )
+        with self.assertRaises(ValueError, msg='Invalid entropy_method'):
+            NPO(
+                env_spec=env.spec,
+                policy=policy,
+                baseline=baseline,
+                entropy_method=None,
+            )
+
+        env.close()
+
+    def test_npo_with_invalid_max_entropy_configuration(self):
+        """Test NPO with invalid max entropy arguments combination."""
+        env = TfEnv(normalize(gym.make('InvertedDoublePendulum-v2')))
+        policy = GaussianMLPPolicy(
+            env_spec=env.spec,
+            hidden_sizes=(64, 64),
+            hidden_nonlinearity=tf.nn.tanh,
+            output_nonlinearity=None,
+        )
+        baseline = GaussianMLPBaseline(
+            env_spec=env.spec,
+            regressor_args=dict(hidden_sizes=(32, 32)),
+        )
+        with self.assertRaises(AssertionError):
+            NPO(
+                env_spec=env.spec,
+                policy=policy,
+                baseline=baseline,
+                entropy_method='max',
+                center_adv=True,
+                stop_entropy_gradient=False,
+            )
+
+        env.close()
+
+    def test_npo_with_invalid_no_entropy_configuration(self):
+        """Test NPO with invalid no entropy arguments combination."""
+        env = TfEnv(normalize(gym.make('InvertedDoublePendulum-v2')))
+        policy = GaussianMLPPolicy(
+            env_spec=env.spec,
+            hidden_sizes=(64, 64),
+            hidden_nonlinearity=tf.nn.tanh,
+            output_nonlinearity=None,
+        )
+        baseline = GaussianMLPBaseline(
+            env_spec=env.spec,
+            regressor_args=dict(hidden_sizes=(32, 32)),
+        )
+        with self.assertRaises(AssertionError):
+            NPO(
+                env_spec=env.spec,
+                policy=policy,
+                baseline=baseline,
+                entropy_method='no_entropy',
+                policy_ent_coeff=0.02,
+            )
+
+        env.close()
+
+    def test_npo_with_invalid_regularized_entropy_configuration(self):
+        """Test NPO with invalid regularized entropy arguments combination."""
+        env = TfEnv(normalize(gym.make('InvertedDoublePendulum-v2')))
+        policy = GaussianMLPPolicy(
+            env_spec=env.spec,
+            hidden_sizes=(64, 64),
+            hidden_nonlinearity=tf.nn.tanh,
+            output_nonlinearity=None,
+        )
+        baseline = GaussianMLPBaseline(
+            env_spec=env.spec,
+            regressor_args=dict(hidden_sizes=(32, 32)),
+        )
+        with self.assertRaises(AssertionError):
+            NPO(
+                env_spec=env.spec,
+                policy=policy,
+                baseline=baseline,
+                entropy_method='regularized',
+                policy_ent_coeff=0.02,
+                stop_entropy_gradient=True,
+            )
 
         env.close()
