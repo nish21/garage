@@ -29,6 +29,8 @@ class DDPG(OffPolicyRLAlgorithm):
 
     def __init__(self,
                  env_spec,
+                 policy,
+                 qf,
                  replay_buffer,
                  target_update_tau=0.01,
                  policy_lr=1e-4,
@@ -42,28 +44,58 @@ class DDPG(OffPolicyRLAlgorithm):
                  discount=0.99,
                  max_action=None,
                  name=None,
-                 **kwargs):
+                 n_epoch_cycles=20,
+                 max_path_length=None,
+                 n_train_steps=50,
+                 buffer_batch_size=64,
+                 min_buffer_size=1e4,
+                 rollout_batch_size=1,
+                 reward_scale=1.,
+                 input_include_goal=False,
+                 smooth_return=True,
+                 exploration_strategy=None):
         """
         Construct class.
 
         Args:
-            env_spec(EnvSpec): Environment specification.
+            env_spec(garage.envs.EnvSpec): Environment specification.
+            policy(garage.tf.policies.base.Policy): Policy.
+            qf(garage.tf.q_functions.QFunction): Q-function.
+            replay_buffer(garage.replay_buffer.base.ReplayBuffer):
+                Replay buffer.
             target_update_tau(float): Interpolation parameter for doing the
-        soft target update.
-            discount(float): Discount factor for the cumulative return.
+                soft target update.
             policy_lr(float): Learning rate for training policy network.
             qf_lr(float): Learning rate for training q value network.
             policy_weight_decay(float): L2 weight decay factor for parameters
-        of the policy network.
+                of the policy network.
             qf_weight_decay(float): L2 weight decay factor for parameters
-        of the q value network.
+                of the q value network.
             policy_optimizer(): Optimizer for training policy network.
             qf_optimizer(): Optimizer for training q function network.
             clip_pos_returns(boolean): Whether or not clip positive returns.
             clip_return(float): Clip return to be in [-clip_return,
-        clip_return].
+                clip_return].
+            discount(float): Discount factor for the cumulative return.
             max_action(float): Maximum action magnitude.
             name(str): Name of the algorithm shown in computation graph.
+            n_epoch_cycles(int): Number of batches of samples in each epoch.
+            max_path_length(int): Maximum length of a path.
+            n_train_steps(int): Number of optimizations in each epoch cycle.
+            buffer_batch_size(int): Size of replay buffer.
+            min_buffer_size(int):
+                Number of samples in replay buffer before first optimization.
+            rollout_batch_size(int):
+            reward_scale(float): Scale to reward.
+            input_include_goal(bool):
+                True if the environment entails a goal in observation.
+            smooth_return(bool):
+                If True, do statistics on all samples collection.
+                Otherwise do statistics on one batch.
+            exploration_strategy(
+                garage.np.exploration_strategies.ExplorationStrategy):
+                Exploration strategy.
+
         """
         action_bound = env_spec.action_space.high
         self.max_action = action_bound if max_action is None else max_action
@@ -73,6 +105,7 @@ class DDPG(OffPolicyRLAlgorithm):
         self.policy_weight_decay = policy_weight_decay
         self.qf_weight_decay = qf_weight_decay
         self.policy_optimizer = policy_optimizer
+        self.n_train_steps = n_train_steps
         self.qf_optimizer = qf_optimizer
         self.name = name
         self.clip_pos_returns = clip_pos_returns
@@ -87,10 +120,20 @@ class DDPG(OffPolicyRLAlgorithm):
 
         super(DDPG, self).__init__(
             env_spec=env_spec,
+            policy=policy,
+            qf=qf,
             replay_buffer=replay_buffer,
             use_target=True,
             discount=discount,
-            **kwargs)
+            n_epoch_cycles=n_epoch_cycles,
+            max_path_length=max_path_length,
+            buffer_batch_size=buffer_batch_size,
+            min_buffer_size=min_buffer_size,
+            rollout_batch_size=rollout_batch_size,
+            reward_scale=reward_scale,
+            input_include_goal=input_include_goal,
+            smooth_return=smooth_return,
+            exploration_strategy=exploration_strategy)
 
     @overrides
     def init_opt(self):

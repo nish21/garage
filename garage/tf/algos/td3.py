@@ -8,7 +8,6 @@ minimum value of two critics instead of one to limit overestimation.
 
 import numpy as np
 import tensorflow as tf
-import tensorflow.contrib as tc
 
 from garage.misc.overrides import overrides
 from garage.tf.algos import DDPG
@@ -27,6 +26,8 @@ class TD3(DDPG):
 
     def __init__(self,
                  env_spec,
+                 policy,
+                 qf,
                  qf2,
                  replay_buffer,
                  target_update_tau=0.01,
@@ -41,34 +42,65 @@ class TD3(DDPG):
                  discount=0.99,
                  max_action=None,
                  name=None,
-                 **kwargs):
+                 n_epoch_cycles=20,
+                 max_path_length=None,
+                 n_train_steps=50,
+                 buffer_batch_size=64,
+                 min_buffer_size=1e4,
+                 rollout_batch_size=1,
+                 reward_scale=1.,
+                 input_include_goal=False,
+                 smooth_return=True,
+                 exploration_strategy=None):
         """
         Construct class.
 
         Args:
-            env(): Environment.
-            qf2(policy): Q function to use
+            env_spec(garage.envs.EnvSpec): Environment.
+            policy(garage.tf.policies.base.Policy): Policy.
+            qf(garage.tf.q_functions.QFunction): Q-function.
+            qf2(garage.tf.q_functions.QFunction): Q function to use
             target_update_tau(float): Interpolation parameter for doing the
-        soft target update.
-            discount(float): Discount factor for the cumulative return.
+                soft target update.
             policy_lr(float): Learning rate for training policy network.
             qf_lr(float): Learning rate for training q value network.
             policy_weight_decay(float): L2 weight decay factor for parameters
-        of the policy network.
+                of the policy network.
             qf_weight_decay(float): L2 weight decay factor for parameters
-        of the q value network.
-            policy_optimizer(): Optimizer for training policy network.
-            qf_optimizer(): Optimizer for training q function network.
+                of the q value network.
+            policy_optimizer(tf.train.Optimizer):
+                Optimizer for training policy network.
+            qf_optimizer(tf.train.Optimizer):
+                Optimizer for training q function network.
             clip_pos_returns(boolean): Whether or not clip positive returns.
             clip_return(float): Clip return to be in [-clip_return,
-        clip_return].
+                clip_return].
+            discount(float): Discount factor for the cumulative return.
             max_action(float): Maximum action magnitude.
             name(str): Name of the algorithm shown in computation graph.
+            n_epoch_cycles(int): Number of batches of samples in each epoch.
+            max_path_length(int): Maximum length of a path.
+            n_train_steps(int): Number of optimizations in each epoch cycle.
+            buffer_batch_size(int): Size of replay buffer.
+            min_buffer_size(int):
+                Number of samples in replay buffer before first optimization.
+            rollout_batch_size(int):
+            reward_scale(float): Scale to reward.
+            input_include_goal(bool):
+                True if the environment entails a goal in observation.
+            smooth_return(bool):
+                If True, do statistics on all samples collection.
+                Otherwise do statistics on one batch.
+            exploration_strategy(
+                garage.np.exploration_strategies.ExplorationStrategy):
+                Exploration strategy.
         """
         self.qf2 = qf2
 
         super(TD3, self).__init__(
             env_spec=env_spec,
+            policy=policy,
+            qf=qf,
             replay_buffer=replay_buffer,
             target_update_tau=target_update_tau,
             policy_lr=policy_lr,
@@ -82,7 +114,16 @@ class TD3(DDPG):
             discount=discount,
             max_action=max_action,
             name=name,
-            **kwargs)
+            n_epoch_cycles=n_epoch_cycles,
+            max_path_length=max_path_length,
+            n_train_steps=n_train_steps,
+            buffer_batch_size=buffer_batch_size,
+            min_buffer_size=min_buffer_size,
+            rollout_batch_size=rollout_batch_size,
+            reward_scale=reward_scale,
+            input_include_goal=input_include_goal,
+            smooth_return=smooth_return,
+            exploration_strategy=exploration_strategy)
 
     @overrides
     def init_opt(self):
@@ -147,9 +188,10 @@ class TD3(DDPG):
             with tf.name_scope('action_loss'):
                 action_loss = -tf.reduce_mean(next_qval)
                 if self.policy_weight_decay > 0.:
-                    policy_reg = tc.layers.apply_regularization(
-                        tc.layers.l2_regularizer(self.policy_weight_decay),
-                        weights_list=self.policy.get_regularizable_vars())
+                    policy_reg = self.policy_weight_decay * tf.add_n([
+                        tf.nn.l2_loss(v)
+                        for v in self.policy.get_regularizable_vars()
+                    ])
                     action_loss += policy_reg
 
             with tf.name_scope('minimize_action_loss'):
@@ -167,9 +209,10 @@ class TD3(DDPG):
                 qval_loss = (tf.reduce_mean(tf.squared_difference(y, qval)) +
                              tf.reduce_mean(tf.squared_difference(y, q2val)))
                 if self.qf_weight_decay > 0.:
-                    qf_reg = tc.layers.apply_regularization(
-                        tc.layers.l2_regularizer(self.qf_weight_decay),
-                        weights_list=self.qf.get_regularizable_vars())
+                    qf_reg = self.qf_weight_decay * tf.add_n([
+                        tf.nn.l2_loss(v)
+                        for v in self.qf.get_regularizable_vars()
+                    ])
                     qval_loss += qf_reg
 
             with tf.name_scope('minimize_qf_loss'):

@@ -1,4 +1,4 @@
-"""
+'''
 This script creates a regression test over garage-TD3.
 
 It get Mujoco1M benchmarks from baselines benchmark, and test each task in
@@ -6,7 +6,7 @@ its trail times on garage model and baselines model. For each task, there will
 be `trail` times with different random seeds. For each trail, there will be two
 log directories corresponding to baselines and garage. And there will be a plot
 plotting the average return curve from baselines and garage.
-"""
+'''
 import datetime
 import os.path as osp
 import random
@@ -49,11 +49,11 @@ params = {
 
 class TestBenchmarkTD3(unittest.TestCase):
     def test_benchmark_td3(self):
-        """
+        '''
         Test garage TD3 benchmarks.
 
         :return:
-        """
+        '''
         # Load Mujoco1M tasks, you can check other benchmarks here
         # https://github.com/openai/baselines/blob/master/baselines/bench/benchmarks.py # noqa: E501
         mujoco1m = benchmarks.get_benchmark('Mujoco1M')
@@ -95,7 +95,7 @@ class TestBenchmarkTD3(unittest.TestCase):
 
 
 def run_garage(env, seed, log_dir):
-    """
+    '''
     Create garage model and training.
 
     Replace the td3 with the algorithm you want to run.
@@ -104,7 +104,7 @@ def run_garage(env, seed, log_dir):
     :param seed: Random seed for the trail.
     :param log_dir: Log dir path.
     :return:
-    """
+    '''
     deterministic.set_seed(seed)
 
     with tf.Graph().as_default():
@@ -174,7 +174,7 @@ def run_garage(env, seed, log_dir):
 
 
 def plot(g_csvs, g_x, g_y, trails, seeds, plt_file, env_id):
-    """
+    '''
     Plot benchmark from csv files of garage.
 
     :param g_csvs: A list contains all csv files in the task.
@@ -185,7 +185,7 @@ def plot(g_csvs, g_x, g_y, trails, seeds, plt_file, env_id):
     :param plt_file: Path of the plot png file.
     :param env_id: String contains the id of the environment.
     :return:
-    """
+    '''
     for trail in range(trails):
         seed = seeds[trail]
 

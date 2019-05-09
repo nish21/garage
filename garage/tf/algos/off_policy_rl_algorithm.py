@@ -19,7 +19,6 @@ class OffPolicyRLAlgorithm(RLAlgorithm):
             discount=0.99,
             n_epoch_cycles=20,
             max_path_length=None,
-            n_train_steps=50,
             buffer_batch_size=64,
             min_buffer_size=1e4,
             rollout_batch_size=1,
@@ -34,7 +33,6 @@ class OffPolicyRLAlgorithm(RLAlgorithm):
         self.qf = qf
         self.replay_buffer = replay_buffer
         self.n_epoch_cycles = n_epoch_cycles
-        self.n_train_steps = n_train_steps
         self.buffer_batch_size = buffer_batch_size
         self.use_target = use_target
         self.discount = discount
