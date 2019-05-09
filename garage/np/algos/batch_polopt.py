@@ -1,7 +1,8 @@
 from garage.logger import logger, snapshotter, tabular
+from garage.misc import special, tensor_utils
 from garage.np.algos.base import RLAlgorithm
 from garage.plotter import Plotter
-from garage.sampler import BatchSampler
+from garage.sampler import BatchSampler, utils
 
 
 class BatchPolopt(RLAlgorithm):
@@ -90,7 +91,7 @@ class BatchPolopt(RLAlgorithm):
         for itr in range(self.current_itr, self.n_itr):
             with logger.prefix('itr #{} | '.format(itr)):
                 paths = self.sampler.obtain_samples(itr)
-                samples_data = self.sampler.process_samples(itr, paths)
+                samples_data = self._process_samples(itr, paths)
                 self.log_diagnostics(paths)
                 self.optimize_policy(itr, samples_data)
                 logger.log('Saving snapshot...')
@@ -114,6 +115,156 @@ class BatchPolopt(RLAlgorithm):
     def log_diagnostics(self, paths):
         self.policy.log_diagnostics(paths)
         self.baseline.log_diagnostics(paths)
+
+    def _process_samples(self, itr, paths):
+        baselines = []
+        returns = []
+
+        if hasattr(self.baseline, 'predict_n'):
+            all_path_baselines = self.baseline.predict_n(paths)
+        else:
+            all_path_baselines = [
+                self.baseline.predict(path) for path in paths
+            ]
+
+        for idx, path in enumerate(paths):
+            path_baselines = np.append(all_path_baselines[idx], 0)
+            deltas = path['rewards'] + \
+                self.discount * path_baselines[1:] - path_baselines[:-1]
+            path['advantages'] = special.discount_cumsum(
+                deltas, self.discount * self.gae_lambda)
+            path['returns'] = special.discount_cumsum(path['rewards'],
+                                                      self.discount)
+            baselines.append(path_baselines[:-1])
+            returns.append(path['returns'])
+
+        ev = special.explained_variance_1d(
+            np.concatenate(baselines), np.concatenate(returns))
+
+        if not self.policy.recurrent:
+            observations = tensor_utils.concat_tensor_list(
+                [path['observations'] for path in paths])
+            actions = tensor_utils.concat_tensor_list(
+                [path['actions'] for path in paths])
+            rewards = tensor_utils.concat_tensor_list(
+                [path['rewards'] for path in paths])
+            returns = tensor_utils.concat_tensor_list(
+                [path['returns'] for path in paths])
+            advantages = tensor_utils.concat_tensor_list(
+                [path['advantages'] for path in paths])
+            env_infos = tensor_utils.concat_tensor_dict_list(
+                [path['env_infos'] for path in paths])
+            agent_infos = tensor_utils.concat_tensor_dict_list(
+                [path['agent_infos'] for path in paths])
+
+            if self.center_adv:
+                advantages = utils.center_advantages(advantages)
+
+            if self.positive_adv:
+                advantages = utils.shift_advantages_to_positive(advantages)
+
+            average_discounted_return = \
+                np.mean([path['returns'][0] for path in paths])
+
+            undiscounted_returns = [sum(path['rewards']) for path in paths]
+
+            ent = np.mean(self.policy.distribution.entropy(agent_infos))
+
+            samples_data = dict(
+                observations=observations,
+                actions=actions,
+                rewards=rewards,
+                returns=returns,
+                advantages=advantages,
+                env_infos=env_infos,
+                agent_infos=agent_infos,
+                paths=paths,
+            )
+        else:
+            max_path_length = max([len(path['advantages']) for path in paths])
+
+            # make all paths the same length (pad extra advantages with 0)
+            obs = [path['observations'] for path in paths]
+            obs = tensor_utils.pad_tensor_n(obs, max_path_length)
+
+            if self.center_adv:
+                raw_adv = np.concatenate(
+                    [path['advantages'] for path in paths])
+                adv_mean = np.mean(raw_adv)
+                adv_std = np.std(raw_adv) + 1e-8
+                adv = [(path['advantages'] - adv_mean) / adv_std
+                       for path in paths]
+            else:
+                adv = [path['advantages'] for path in paths]
+
+            adv = np.asarray(
+                [tensor_utils.pad_tensor(a, max_path_length) for a in adv])
+
+            actions = [path['actions'] for path in paths]
+            actions = tensor_utils.pad_tensor_n(actions, max_path_length)
+
+            rewards = [path['rewards'] for path in paths]
+            rewards = tensor_utils.pad_tensor_n(rewards, max_path_length)
+
+            returns = [path['returns'] for path in paths]
+            returns = tensor_utils.pad_tensor_n(returns, max_path_length)
+
+            agent_infos = [path['agent_infos'] for path in paths]
+            agent_infos = tensor_utils.stack_tensor_dict_list([
+                tensor_utils.pad_tensor_dict(p, max_path_length)
+                for p in agent_infos
+            ])
+
+            env_infos = [path['env_infos'] for path in paths]
+            env_infos = tensor_utils.stack_tensor_dict_list([
+                tensor_utils.pad_tensor_dict(p, max_path_length)
+                for p in env_infos
+            ])
+
+            valids = [np.ones_like(path['returns']) for path in paths]
+            valids = tensor_utils.pad_tensor_n(valids, max_path_length)
+
+            average_discounted_return = \
+                np.mean([path['returns'][0] for path in paths])
+
+            undiscounted_returns = [sum(path['rewards']) for path in paths]
+
+            ent = np.sum(
+                self.policy.distribution.entropy(agent_infos) *
+                valids) / np.sum(valids)
+
+            samples_data = dict(
+                observations=obs,
+                actions=actions,
+                advantages=adv,
+                rewards=rewards,
+                returns=returns,
+                valids=valids,
+                agent_infos=agent_infos,
+                env_infos=env_infos,
+                paths=paths,
+            )
+
+        logger.log('fitting baseline...')
+        if hasattr(self.baseline, 'fit_with_samples'):
+            self.baseline.fit_with_samples(paths, samples_data)
+        else:
+            self.baseline.fit(paths)
+        logger.log('fitted')
+
+        tabular.record('Iteration', itr)
+        tabular.record('AverageDiscountedReturn', average_discounted_return)
+        tabular.record('AverageReturn', np.mean(undiscounted_returns))
+        tabular.record('ExplainedVariance', ev)
+        tabular.record('NumTrajs', len(paths))
+        tabular.record('Entropy', ent)
+        tabular.record('Perplexity', np.exp(ent))
+        tabular.record('StdReturn', np.std(undiscounted_returns))
+        tabular.record('MaxReturn', np.max(undiscounted_returns))
+        tabular.record('MinReturn', np.min(undiscounted_returns))
+
+        return samples_data
+
 
     def init_opt(self):
         """
